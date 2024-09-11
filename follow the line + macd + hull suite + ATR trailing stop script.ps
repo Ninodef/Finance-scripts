@@ -1,0 +1,171 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © kuryozyty
+
+//@version=5
+strategy("follow the line + macd + hull suite + ATR trailing stop", overlay=true, initial_capital = 100000, default_qty_value = 80, default_qty_type = strategy.percent_of_equity)
+
+//MACD
+// Getting inputs
+fast_length = input.int(100, title = "Fast Length")
+slow_length = input.int(200, title = "Slow Length")
+src = input.source(close, title = "Source")
+signal_length = input.int(50, title = "Signal Smoothing", minval = 1, maxval = 50)
+sma_source = input.string("EMA", title = "Oscillator MA Type", options = ["SMA", "EMA"])
+sma_signal = input.string("EMA", title = "Signal Line MA Type", options = ["SMA", "EMA"])
+
+// Calculating
+fast_ma = (sma_source == "SMA") ? ta.sma(src, fast_length) : ta.ema(src, fast_length)
+slow_ma = (sma_source == "SMA") ? ta.sma(src, slow_length) : ta.ema(src, slow_length)
+macd = fast_ma - slow_ma
+signal = (sma_signal == "SMA") ? ta.sma(macd, signal_length) : ta.ema(macd, signal_length)
+hist = macd - signal
+
+
+
+// ATR Trailing Stop
+ATRPeriod = input.int(14, "ATR Period", tooltip = "This is the number of bars back that the script uses to calculate the Average True Range.")
+ATRMultiplier = input.float(3, "ATR Multiplier", step=.1, tooltip = "This is the multiple of the ATR average that will function as the trail.")
+
+ATR = ta.atr(ATRPeriod)
+Stop = ATRMultiplier * ATR
+
+var ATRTrailingStop = 0.0
+ATRTrailingStop := if close > ATRTrailingStop[1] and close[1] > ATRTrailingStop[1]
+    math.max(ATRTrailingStop[1], close - Stop)
+else if close < ATRTrailingStop[1] and close[1] < ATRTrailingStop[1]
+    math.min(ATRTrailingStop[1], close + Stop)
+else if close > ATRTrailingStop[1]
+    close - Stop 
+else 
+    close + Stop
+
+var Position = 0.0
+Position := if close[1] < ATRTrailingStop[1] and close > ATRTrailingStop[1]
+    1
+else if close[1] > ATRTrailingStop[1] and close < ATRTrailingStop[1]
+    -1
+else
+    Position[1]
+
+PlotColor = Position == -1 ? color.red : Position == 1 ? color.green : color.navy
+plot(ATRTrailingStop, color=PlotColor, linewidth=input(1, "Line Width"), title="ATR Trailing Stop")
+
+//follow the trend line
+//          INPUTS: 
+lenFast = input.int(7, title="Length of Fast ", minval=1)
+lenSlow = input.int(551, title="Length of Slow ", minval=1)
+lenC = input.int(8, title="Length of  Curve", minval=1)
+
+co(sFast, sSlow, lFast, lSlow, lC)=>
+    fastC = ta.sma(sFast, lFast)
+    slowC = ta.sma(sSlow, lSlow)
+    cC = fastC + slowC
+    ta.sma(cC, lC)
+
+closeC = co(close, close, lenFast, lenSlow, lenC)
+//              PLOTTING: 
+lineColor = closeC > closeC[1] ? #1065e4 : #ffa952
+c = plot(closeC/2, title=" Curve", color=lineColor, linewidth=2, transp=0)
+
+
+
+//Hull Suite by InSilico
+
+//INPUT
+_srcH = input(close, title="Source")
+modeSwitch = input.string("Hma", title="Hull Variation", options=["Hma", "Thma", "Ehma"])
+_length = input.int(55, title="Length(180-200 for floating S/R , 55 for swing entry)")
+lengthMult = input.float(1.0, title="Length multiplier (Used to view higher timeframes with straight band)")
+
+useHtf = input.bool(false, title="Show Hull MA from X timeframe? (good for scalping)")
+htf = input.timeframe("240", title="Higher timeframe")
+
+switchColor = input.bool(true, "Color Hull according to trend?")
+candleCol = input.bool(false,title="Color candles based on Hull's Trend?")
+visualSwitch  = input(false, title="Show as a Band?")
+thicknesSwitch = input.int(3, title="Line Thickness")
+transpSwitch = input.int(40, title="Band Transparency",step=5)
+
+//FUNCTIONS
+//HMA
+HMA(_srcH, _length) =>  ta.wma(2 * ta.wma(_srcH, _length / 2) - ta.wma(_srcH, _length), math.round(math.sqrt(_length)))
+//EHMA    
+EHMA(_srcH, _length) =>  ta.ema(2 * ta.ema(_srcH, _length / 2) - ta.ema(_srcH, _length), math.round(math.sqrt(_length)))
+//THMA    
+THMA(_srcH, _length) =>  ta.wma(ta.wma(_srcH,_length / 3) * 3 - ta.wma(_srcH, _length / 2) - ta.wma(_srcH, _length), _length)
+    
+//SWITCH
+Mode(modeSwitch, src, len) =>
+      modeSwitch == "Hma"  ? HMA(_srcH, len) :
+      modeSwitch == "Ehma" ? EHMA(_srcH, len) : 
+      modeSwitch == "Thma" ? THMA(_srcH, len/2) : na
+
+//OUT
+_hull = Mode(modeSwitch, src, int(_length * lengthMult))
+HULL = useHtf ? request.security(syminfo.tickerid, htf, _hull) : _hull
+MHULL = HULL[0]
+SHULL = HULL[2]
+
+//COLOR
+hullColor = switchColor ? (HULL > HULL[2] ? #00ff00 : #ff0000) : #ff9800
+
+//PLOT
+///< Frame
+Fi1 = plot(MHULL, title="MHULL", color=hullColor, linewidth=thicknesSwitch, transp=50)
+Fi2 = plot(visualSwitch ? SHULL : na, title="SHULL", color=hullColor, linewidth=thicknesSwitch, transp=50)
+
+///< Ending Filler
+fill(Fi1, Fi2, title="Band Filler", color=hullColor, transp=transpSwitch)
+///BARCOLOR
+barcolor(color = candleCol ? (switchColor ? hullColor : na) : na)
+
+
+//CONDITIONS
+IsFollowthelineGreen = lineColor == #1065e4
+IsHullsuiteGreen = hullColor == #00ff00
+IsMacdGreen = hist >= 0 and hist[1] < hist
+WasMacdGreenfor2periods = IsMacdGreen and hist[1] >= 0 and hist[2] < hist[1] and hist[2] >= 0 and hist[3] < hist[2]
+IsFollowthelineRed = lineColor == #ffa952
+IsHullsuiteRed = hullColor == #ff0000
+IsMacdRed = hist <= 0 and hist[1] > hist
+WasMacdRedfor2periods = IsMacdRed and hist[1] <= 0 and hist[2] > hist[1] and hist[2] <= 0 and hist[3] > hist[2]
+notintrade = strategy.position_size <= 0
+ATRTrailingStopRed = PlotColor == color.red
+ATRTrailingStopGreen = PlotColor == color.green
+
+// Enter long condition : all four of the conditions are met 
+golongcondition = IsFollowthelineGreen and IsHullsuiteGreen and WasMacdGreenfor2periods and ATRTrailingStopGreen
+
+// Exit long condition: at least two of the conditions are met
+exitlongCondition = (IsFollowthelineRed ? 1 : 0) + (IsHullsuiteRed ? 1 : 0) + (WasMacdRedfor2periods ? 1 : 0) >= 2
+
+// Long Strategy logic
+if (golongcondition  and notintrade)
+    stoploss = ATRTrailingStop
+    risk = close - stoploss
+    takeprofit = close + 4 * risk
+    strategy.entry("long", strategy.long, comment = "long entry")
+    strategy.exit("Stoploss/Takeprofit long", from_entry="long", stop=stoploss, limit = takeprofit, comment_loss = "Stoploss long", comment_profit = "Takeprofit long")
+    
+if (exitlongCondition)
+    strategy.close("long", comment = "long exit")
+
+
+//Enter short condition : all four of the conditions are met 
+goshortcondition = IsFollowthelineRed and IsHullsuiteRed and WasMacdRedfor2periods and ATRTrailingStopRed
+
+// Exit short condition: at least two of the conditions are met
+exitshortCondition = (IsFollowthelineGreen ? 1 : 0) + (IsHullsuiteGreen ? 1 : 0) + (WasMacdGreenfor2periods ? 1 : 0) >= 2
+
+// Short Strategy logic
+if (goshortcondition and notintrade)
+    stoploss = ATRTrailingStop
+    risk = stoploss - close 
+    takeprofit = close - 1.5 * risk
+    strategy.entry("short", strategy.short, comment = "short entry")
+    strategy.exit("Stoploss/Takeprofit long", from_entry="short", stop=stoploss, limit = takeprofit, comment_loss = "Stoploss short", comment_profit = "Takeprofit short")
+    
+if (exitshortCondition)
+    strategy.close("short", comment = "short exit")
+
+
