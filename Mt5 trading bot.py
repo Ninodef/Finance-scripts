@@ -11,7 +11,7 @@ mt.initialize()
 # Login to the account
 login = 7453068
 server = 'VantageInternational-Demo'
-password = 'mFCZC4b%'
+password = '*******'
 mt.login(login, password, server)
 
 # Define constants
