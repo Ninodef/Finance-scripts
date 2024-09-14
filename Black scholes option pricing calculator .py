@@ -30,11 +30,11 @@ def calculate_prices():
     label_call_price.config(text=f"Call Option Price: {call_price:.2f}")
     label_put_price.config(text=f"Put Option Price: {put_price:.2f}")
 
-# Create the main window
+
 root = tk.Tk()
 root.title("Black-Scholes Option Pricing Model")
 
-# Create and place the input fields and labels
+
 ttk.Label(root, text="Current Stock Price (S):").grid(row=0, column=0, padx=10, pady=5)
 entry_S = ttk.Entry(root)
 entry_S.grid(row=0, column=1, padx=10, pady=5)
@@ -55,16 +55,16 @@ ttk.Label(root, text="Volatility (sigma):").grid(row=4, column=0, padx=10, pady=
 entry_sigma = ttk.Entry(root)
 entry_sigma.grid(row=4, column=1, padx=10, pady=5)
 
-# Create and place the button
+
 button_calculate = ttk.Button(root, text="Calculate Prices", command=calculate_prices)
 button_calculate.grid(row=5, column=0, columnspan=2, pady=10)
 
-# Create and place the result labels
+
 label_call_price = ttk.Label(root, text="Call Option Price: ")
 label_call_price.grid(row=6, column=0, columnspan=2, pady=5)
 
 label_put_price = ttk.Label(root, text="Put Option Price: ")
 label_put_price.grid(row=7, column=0, columnspan=2, pady=5)
 
-# Run the application
+
 root.mainloop()
